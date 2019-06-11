@@ -24,6 +24,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(superSafeWebView)
 
         superSafeWebView.webViewClient = MyWebViewClient(applicationContext)
+        superSafeWebView.webChromeClient = MyWebChromeClient()
+
         superSafeWebView.settings.javaScriptEnabled = true
         superSafeWebView.addJavascriptInterface(WebAppInterface(applicationContext), "Android")
         safeBrowsingIsInitialized = false
