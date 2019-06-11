@@ -157,7 +157,7 @@ Theo mặc định, các yêu cầu mở cửa sổ mới được bỏ qua. Đi
 
 ## Managing WebView
 
-### Version API
+#### Version API
 
 * Thêm thư viện [Webkit](https://developer.android.com/reference/androidx/webkit/package-summary) của AndroidX để sử dụng các phương thức control WebView. 
 
@@ -172,7 +172,7 @@ val webViewPackageInfo = WebViewCompat.getCurrentWebViewPackage(appContext)
 Log.d("MY_APP_TAG", "WebView version: ${webViewPackageInfo.versionName}")
 ```
 
-### Google Safe Browsing Service
+#### Google Safe Browsing Service
 
 * Để cung cấp cho người dùng của bạn trải nghiệm an toàn hơn, các đối tượng WebView xác minh URL bằng Google Safe Browsing, cho phép hiển thị cảnh báo đối với người dùng khi họ cố mở 1 trang web có khả năng không an toàn.
 
@@ -185,7 +185,7 @@ Log.d("MY_APP_TAG", "WebView version: ${webViewPackageInfo.versionName}")
                    android:value="false" />
 ```
 
-### Defining programmatic actions
+#### Defining programmatic actions
 
 * Khi một instance của WebView cố tải 1 trang web được Google phân loại là mối đe dọa, WebView sẽ theo mặc định hiển thị 1 quảng cáo xen kẽ cảnh báo người dùng về mối đe dọa đã biết. Màn hình này cung cấp cho người dùng tùy chọn tải URL bằng mọi cách hoặc quay lại 1 cách an toàn.
 
@@ -227,5 +227,219 @@ override fun onSafeBrowsingHit(view: WebView, request: WebResourceRequest, threa
     }
 ```
 
-### HTML5 Geolocation API
+#### HTML5 Geolocation API
+
+* Đối với những app chạy từ Android 6.0 (API 23) trở lên, Geolocation API chỉ hỗ trợ trên giao thức an toàn chẳng hạn như HTTPS. Mọi request tới Geolocation API đối với giao thức không an toàn sẽ tự động bị từ chối mà không cần gọi phương thức **onGeolocationPermissionsShowPrompt()**.
+
+#### Opting out of metrics collection
+
+* WebView có khả năng tải dữ liệu chẩn đoán ẩn danh trên Google khi người dùng đã đồng ý. Dữ liệu thu thập trên cơ sở mỗi ứng dụng đã khởi tạo WebView. Bạn có thể hủy tính năng này bằng cách tạo thẻ trong <applicaton>. 
+
+```
+<meta-data android:name="android.webkit.WebView.MetricsOptOut"
+               android:value="true" />
+```
+
+#### Termination Handling API
+
+* API này xử lý các trường hợp quá trình render cho 1 đối tượng WebView biến mất, vì hệ thống đã hủy trình render để lấy lại bộ nhớ cần thiết hoặc do chính trình render bị lỗi. Bằng cách sử dụng API này cho phép ứng dụng tiếp tục thực thi mặc dù quá trình render đã biến mất.
+> Nếu ứng dụng của bạn tiếp tục thực thi sau khi trình render biến mất, instance của WebView được liên kết không thể được sử dụng lại, bất kể quá trình render bị hủy hay bị crash. Phải xóa instance cũ đi và khởi tạo 1 instance mới của WebView.
+
+* Lưu ý rằng nếu trình render crash khi đang tải trang web, việc cố gắng tải lại trng đó có thể khiến instance WebView mới thực hiện giống như crash của trình render.
+
+```
+override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return false
+        }
+        super.onRenderProcessGone(view, detail)
+
+        detail?.let {
+            if (!it.didCrash()) {
+                // Renderer was killed because the system ran out of memory.
+                // The app can recover gracefully by creating a new WebView instance
+                // in the foreground.
+
+                Log.d(TAG, "onRenderProcessGone(): System killed the WebView rendering process to reclaim. Recreating...")
+                mWebView?.let { webView ->
+                    val webViewContainer: ViewGroup = webView.parent as ViewGroup
+                    webViewContainer.removeView(webView)
+                    webView.destroy()
+                    mWebView = null
+                }
+
+                // By this point, the instance variable "mWebView" is guaranteed
+                // to be null, so it's safe to reinitialize it.
+
+                return true
+            }
+        }
+
+        // Renderer crashed because of an internal error, such as a memory access violation.
+        Log.e("MY_APP_TAG", "The WebView rendering process crashed!")
+
+        // In this example, the app itself crashes after detecting that the
+        // renderer crashed. If you choose to handle the crash more gracefully
+        // and allow your app to continue executing, you should 1) destroy the
+        // current WebView instance, 2) specify logic for how the app can
+        // continue executing, and 3) return "true" instead.
+
+        return false
+    }
+```
+
+#### Renderer importance API
+
+* Giờ dây, WebView hoạt đột ở chế độ [multiprocess](https://developer.android.com/preview/behavior-changes-all#security-all) bạn có thể linh hoạt trong cách ứng dụng của bạn xử lý tình huống hết bộ nhớ.
+
+* Bạn có thể sử dụng Renderer Importance API, được giới thiệu trong Android 8.0, để cài đặt chính sách ưu tiên cho trình render được gán cho 1 đối tượng WebView cụ thể. 
+
+* Cụ thể, bạn có thể muốn phần chính của ứng dụng tiếp tục thực thi khi trình render bị kill.
+
+```
+myWebView.setRendererPriorityPolicy(RENDERER_PRIORITY_BOUND, true)
+```
+> Trong đoạn mã trên, mức độ ưu tiên của trình render giống như mức độ ưu tiên mặc định cho ứng dụng. Đối số **true** sẽ giảm mức ưu tiên của trình render thành **RENDERER_PRIORITY_WAIVED** khi đối tượng WebVew được liên kết không còn hiển thị nữa.
+
+## Migrating to WebView in Android 4.4
+
+* Android 4.4 (API 19) giới thiệu phiên bản WebView mới dựa trên **Chromium**. Thay đổi này nhằm nâng cấp hiệu suất và tiêu chuẩn WebView hỗ trợ HTML5, CSS3 và JavaScript.
+
+* Để giúp bạn có thể sửa các lỗi gặp phải khi di chuyển ứng dụng của bạn sang WebView trong Android 4.4,bạn có thể bật debugging thông qua Chrome trên máy tính để bàn bằng cách sử dụng hàm **setWebContentsDebuggingEnabled()**. Tính năng này trong WebView cho phép bạn kiểm tra và phân tích nội dung web, scripts và hoạt động của mạng trong khi chạy WebView. Xem thêm tại [đây](https://developers.google.com/web/tools/chrome-devtools/remote-debugging/?utm_source=dcc&utm_medium=redirect&utm_campaign=2016q3)
+
+#### User Agent Changes
+
+Nếu bạn không có nhu cầu thay đổi tác nhân người dùng, hãy sử dụng phương thức **getDefaultUserAgent()** để chỉ định người dùng mặc định. Còn nếu muốn ghi đè chuỗi tác nhân người dùng trong WebView, bạn có thể muốn sử dụng **getUserAgentString()**.
+
+#### Multi-threading and Thread Blocking
+
+* Bạn có thể gọi các phương thức của WebView từ bất kì luồng nào ngoài luồng UI của ứng dụng, nó có thể gây ra kết quả không mong muốn. Nếu ứng dụng của bạn có nhiều luồng, hãy sử dụng như sau: 
+
+```
+runOnUiThread {
+    // Code for WebView goes here
+}
+```
+
+* CŨng nên chắc chắn rằng bạn không bao giờ chặn UI thread. 1 tình huống trong đó là 1 số ứng dụng chờ đợi 1 cuộc gọi JavaScript.
+
+```
+// This code is BAD and will block the UI thread
+webView.loadUrl("javascript:fn()")
+while (result == null) {
+    Thread.sleep(100)
+}
+```
+
+* Thay vào đó bạn nên sử dụng 1 phương thức mới như **evaluateJavascript()** để chạy JavaScript không đồng bộ.
+
+#### Custom URL Handling
+
+* WebView mới áp dụng các hạn chế bổ sung khi yêu cầu tài nguyên và giải quyết các liên kết sử dụng custom URL schema. Ví dụ nếu bạn triển khai các phương thức như **shouldOverrideUrlLoading()** hoặc **shouldInterceptRequest()** thì WebView chỉ gọi chúng cho các URL hợp lệ.
+
+* Nếu bạn đang sử dụng custom URL hoặc base URL và nhận thấy rằng ứng dụng của bạn sẽ nhận được ít cuộc gọi đến, hãy đảm bảo rằng các yêu cầu chỉ định URL hợp lệ với [RFC 3986](http://tools.ietf.org/html/rfc3986#appendix-A)
+
+* Ví dụ dưới đây có thể WebView của bạn sẽ không gọi đến phương thức **shouldOverrideUrlLoading()**.
+
+```
+<a href="showProfile">Show Profile</a>
+```
+
+* Kết quả của việc click trên có thể khác nhau tùy trường hợp: 
+
+    * Nếu bạn đã tải trang bằng cách gọi **loadData()** hoặc **loadDataWithBaseUrl()** với URL cơ sở không hợp lệ hoặc null thì bạn sẽ không nhận được cuộc gọi lại **shouldOverrideUrlLoading()** cho loại liên kết như này.
+    * Nếu bạn đã tải trang bằng cách gọi **loadUrl()** hoặc cung cấp URL cơ sở hợp lệ với **loadDataWithBaseURL()** nhưng URL bạn nhận được sẽ tuyệt đối, liên quan đến trang hiện tại. Ví dụ URL bạn nhận được sẽ là **http://www.example.com/showProfile**.
+    
+* Thay vì sử dụng mỗi chuỗi đơn giản, bạn có thể sử dụng custom schema như dưới đây: 
+
+```
+<a href="example-app:showProfile">Show Profile</a>
+```
+
+* Khi đó việc handle URL bên trong phương thức **shouldOverrideUrlLoading()** như sau: 
+
+```
+// The URL scheme should be non-hierarchical (no trailing slashes)
+const val APP_SCHEME = "example-app:"
+
+override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+    return if (url?.startsWith(APP_SCHEME) == true) {
+        urlData = URLDecoder.decode(url.substring(APP_SCHEME.length), "UTF-8")
+        respondToData(urlData)
+        true
+    } else {
+        false
+    }
+}
+```
+
+* Nếu bạn không thể thay đổi HTML thì bạn có thể sử dụng **loadDataWithBaseURL()** và đặt base URL bao gồm custom schema và host phù hợp.
+
+```
+webView.loadDataWithBaseURL("example-app://example.co.uk/", HTML_DATA, null, "UTF-8", null)
+```
+
+#### Viewport Changes
+
+* Trước đây, nếu bạn đặt chiều rộng khung nhìn của bạn thành 1 giá trị nhỏ hơn hoặc bằng "320", nó sẽ được đặt thành chiều rộng thiết bị. Và nếu bạn đặt chiều cao của khung nhìn thành 1 giá trị nhỏ hơn hoặc bằng chiều cao của WebView, nó sẽ được đặt thành **chiều cao thiết bị**. Nhưng trong WebView mới thì giá trị chiều rộng hoặc chiều cao được tuân thủ và WebView phóng to để lấp đầy chiều rộng màn hình.
+
+* Trước đây nếu bao gồm nhiều thẻ trong 1 trang web, WebView sẽ hợp nhất các thuộc tính từ tất cả các thẻ. Trong WebView mới, chỉ có chế độ xem cuối cùng được sử dụng và tất cả các chế độ xem khác được bỏ qua.
+
+* Phương thức **getDefaultZoom()** và **setDefaultZoom()** không còn được hỗ trợ nữa và thay vào đó bạn nên xác định [chế độ xem](https://developer.chrome.com/multidevice/webview/pixelperfect) phù hợp cho trang web. Nếu bạn không thể đặt độ rộng của chế độ xem trong HTML, bạn bên gọi **setUserWideViewPort()** để dảm bảo trang được cung cấp chế độ xem lớn hơn.
+
+```
+webView.settings.apply {
+    useWideViewPort = true
+    loadWithOverviewMode = true
+}
+```
+
+## Debugging web apps
+
+* Nếu bạn đang test ứng dụng web của mình với thiết bị Android 4.4 trở lên, bạn có thể gỡ lỗi từ xa các trang web bằng **Chrome Developer Tools**, trong khi tiếp tục hỗ trợ các phiên bản Android cũ hơn. Xem thêm tại [đây](https://developers.google.com/web/tools/chrome-devtools/remote-debugging/?utm_source=dcc&utm_medium=redirect&utm_campaign=2016q3)
+
+* Nếu bạn không có thiết bị chạy Android 4.4 trở lên, bạn có thẻ gỡ lỗi JavaScript bằng API JavaScript của bảng điều khiển và xem cá thông báo đầu ra để đăng nhập. Framework Webkit của Android hỗ trợ gần hết các API để hỗ trợ debug ở trong trình duyệt Android hoặc là WebView của bạn.
+
+* Tham khảo một số cách sau:
+
+    * [Remote Debugging on Android](https://developers.google.com/web/tools/chrome-devtools/remote-debugging/?utm_source=dcc&utm_medium=redirect&utm_campaign=2016q3)
+    * [Debug your app](https://developer.android.com/studio/debug/index.html)
+
+#### Using Console APIs in the Android Browser
+
+* Khi bạn gọi hàm **console** (nằm trong đối tượng window.console của DOM), đầu ra xuất hiện trong logcat. Cách gọi đơn giản như **console.log("Hello World")** sẽ hiển thị log ra thông tin cần thiết. Có thể có 1 vài dạng log khác như:
+
+    * console.log(String)
+    * console.info(String)
+    * console.warn(String)
+    * console.error(String)
+    
+#### Using Console APIs in WebView
+
+* Tất cả các API được hiển thị ở trên cũng được hỗ trợ khi debugging trên WebView. Nếu bạn đang nhắm mục tiêu Android 2.1 (API 7), bạn phải cung cấp **WebChromeClient** để thực hiện phương thức **onConsoleMessage()** để thông báo xuất hiện trong logcat.
+
+```
+val myWebView: WebView = findViewById(R.id.webview)
+myWebView.webChromeClient = object : WebChromeClient() {
+
+    override fun onConsoleMessage(message: String, lineNumber: Int, sourceID: String) {
+        Log.d("MyApplication", "$message -- From line $lineNumber of $sourceID")
+    }
+}
+```
+
+* Tuy nhiên, nếu phiên bản từ API 8 trở lên, thay vào đó bạn nên triển khai như sau:
+
+```
+val myWebView: WebView = findViewById(R.id.webview)
+myWebView.webChromeClient = object : WebChromeClient() {
+
+    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+        consoleMessage?.apply {
+            Log.d("MyApplication", "${message()} -- From line ${lineNumber()} of ${sourceId()}")
+        }
+        return true
+    }
+}
+```
 
