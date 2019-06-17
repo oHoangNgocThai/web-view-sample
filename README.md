@@ -443,3 +443,29 @@ myWebView.webChromeClient = object : WebChromeClient() {
 }
 ```
 
+#### Cache in WebView
+
+* Trong những trường hợp mất mạng có thể thấy là trang web của chúng ta sẽ không thể tải lại được ngay cả khi đã được tải trước đó rồi. Chính vì vậy chúng ta phải sử dụng đến Cache để nếu trong trường hợp mất mạng còn có thể hiển thị nội dung chứ không phải là thông báo lỗi.
+
+* Đầu tiên chúng ta cần bật chế độ cache lên ở trong **WebView.Setting** bằng phương thức ** setAppCacheEnabled(true)**```
+
+* Sau đó cần xác định thư mục để chứa cache của trang web, ở đây sử dụng thư mục **CacheDir**.
+
+```
+val appCachePath = applicationContext.cacheDir.absolutePath
+Log.d(TAG, "Cache path: $appCachePath")
+mWebView.settings.setAppCachePath(appCachePath)
+mWebView.settings.allowFileAccess = true
+```
+
+* Sử dụng phương thức **setCacheMode()** để quy định phương thức load của WebView.
+
+```
+// Network available
+mWebView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+
+// No Network
+mWebView.settings.cacheMode = WebSettings.LOAD_CACHE_ONLY
+```
+
+* Sau đó là load các trang web thông qua phương thức **loadUrl()**.
